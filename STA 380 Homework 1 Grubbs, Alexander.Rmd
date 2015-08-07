@@ -1,0 +1,462 @@
+---
+title: "Predictive Modeling HWK1"
+author: "Alec Grubbs"
+date: "August 5, 2015"
+output: word_document
+---
+
+``` {r, include = FALSE}
+library(mosaic)
+library(fImport)
+library(foreach)
+georgia <- read.csv("georgia2000.csv",header=TRUE)
+attach(georgia)
+set.seed(1)
+```
+
+##Exploratory Analysis
+
+####Here was are looking at a sample of the dataset. The data is composed of each Georgia county with the main variables we are interested in being: ballots, the number of ballots cast in that county; votes, the number of votes recorded in that county; equip, the type of voting equipment used with the categories of Lever, Optical, Paper, and Punch; poor, given a numerical value of 1 if more than 25% of the residents in a county live below 1.5 times the federal poverty line, or 0 otherwise; perAA, the percent of people in the county who are African-American.
+
+``` {r,echo=FALSE}
+head(georgia)
+```
+
+###Voting Equipment
+
+####We start out by comparing the number of ballots placed versus the votes counted for each county. We can clearly see several large outliers
+
+
+``` {r,echo=FALSE}
+plot(ballots-votes,main="Voting Discrepancies Among Counties",xlab="Counties",ylab="Number of Ballots Not Counted")
+```
+
+####We find the mean of the difference between ballots and votes among all counties to be 595.478
+
+
+``` {r}
+mean(ballots-votes)
+```
+
+####We can also quantify the number of counties with a difference greater than the mean and divide them up by the voting equipment that is used. Here we see that paper equipment does not contain any of these outliers, while 62% of the outliers are from optical voting machines.
+
+``` {r,echo=FALSE}
+xtabs((ballots-votes)>595.478~equip,data=georgia)
+```
+
+####Performing a histogram plot of the difference and grouping by type of equipment also displays on which equipment the majority of outliers lie. We can see that both optical and punch methods have a large range of differences compared to the remaing two methods, but even averaging on those individual equipments shows outliers, especially the two outliers we see for the punch equip. 
+
+``` {r,echo=FALSE}
+plot(equip,ballots-votes,main="Voting Discrepancies Versus Equipment Type",xlab="Voting Equipment Type",ylab="Number of Ballots Not Counted")
+```
+
+###Poor and Minority Communities
+
+####Given that we have seen that the optical and punch card methods of voting are more likely to have higher rates of undercount, we now want to see if that bias impacts the counties that are considered poor or contain minority communities
+
+####Graphing the difference versus whether the county is considered poor shows us visually the the majority of outliers exist in non-poor counties.
+
+``` {r,echo=FALSE}
+plot(poor,ballots-votes,main="Voting Discrepancies Versus County Poverty",xlab="County Poverty (0-1 (Poor))",ylab="Number of Ballots Not Counted")
+```
+
+####This is further seen by graphing which equipment was used by the counties, and we see all paper equipment, with the lowest number of difference outliers, was exclusively used by poor counties. The lever equipment was also primarily used by poor counties. The two equipments with the largest number of outliers, optical and punch, were more likely to be used by non-poor counties. From this we can conclude that the use of equipment that resulted in large differences between ballots and votes was in fact more impactful on non-poor counties, than poor ones.
+
+``` {r,echo=FALSE}
+plot(equip,poor,main="Equipment Types Versus County Poverty",xlab="Voting Equipment Type",ylab="County Poverty (0-1 (Poor))")
+```
+
+####Moving to counties with a large minority percentage, we plot the difference versus the percentage of minorities and see a different result than with poor counties. The largest outliers are now in counties with a minority percentage greater than 0.4. 
+
+``` {r,echo=FALSE}
+plot(perAA,ballots-votes,main="Voting Discrepancies Versus African-American Percentage",xlab="Percentage of African-Americans in County",ylab="Number of Ballots Not Counted")
+```
+
+####However, creating a table and seperating the counties at 30% minority population still shows that over 70% of outliers (difference greater than the mean difference of all counties) occur in counties with a low percentage of minorities.
+
+``` {r,echo=FALSE}
+xtabs((ballots-votes)>595.478~perAA<0.3,data=georgia)
+```
+
+####Creating a histogram plot of the minority percentage versus equipment used shows us that minority counties with a minority percentage greater than 30% were more likely to use a paper method, which had no difference outliers, and less likely to use the optical equipment which contained the majority of outliers.
+
+``` {r,echo=FALSE}
+plot(equip,perAA,main="African-American Percentage Versus Equipment Types",xlab="Voting Equipment Type",ylab="Percentage of African-Americans in County")
+```
+
+####Based on this visual analysis it would be correct to say that we should not worry about difference bias from equipment affecting poor and minority counties, as these counties are more likely to use the types of equipment that do not contain the difference outliers.
+
+
+
+##Bootstrapping
+
+``` {r, include = FALSE}
+mystocks = c("SPY", "TLT", "LQD", "EEM", "VNQ")
+myprices = yahooSeries(mystocks, from='2010-08-04', to='2015-08-04')
+
+YahooPricesToReturns = function(series) {
+	mycols = grep('Adj.Close', colnames(series))
+	closingprice = series[,mycols]
+	N = nrow(closingprice)
+	percentreturn = as.data.frame(closingprice[2:N,]) / as.data.frame(closingprice[1:(N-1),]) - 1
+	mynames = strsplit(colnames(percentreturn), '.', fixed=TRUE)
+	mynames = lapply(mynames, function(x) return(paste0(x[1], ".PctReturn")))
+	colnames(percentreturn) = mynames
+	as.matrix(na.omit(percentreturn))
+}
+
+myreturns = YahooPricesToReturns(myprices)
+```
+
+
+###Characterizing Exchange Traded Funds (ETFs)
+
+
+
+####SPY has a mean of 0.000615 and a standard deviation of 0.00935
+
+``` {r,echo=FALSE}
+plot(myreturns[,1], type='l', main="Daily Percentage Returns on Investment Over 5 Year Period for SPY", ylab="Percentage Returns")
+```
+
+``` {r, include = FALSE}
+mu_SPY = mean(myreturns[,1])
+sigma_SPY = sd(myreturns[,1])
+```
+
+####TLT has a mean of 0.000344 and a standard deviation of 0.00977
+
+``` {r,echo=FALSE}
+plot(myreturns[,2], type='l', main="Daily Percentage Returns on Investment Over 5 Year Period for TLT", ylab="Percentage Returns")
+```
+
+``` {r, include = FALSE}
+mu_TLT = mean(myreturns[,2])
+sigma_TLT = sd(myreturns[,2])
+```
+
+####LQD has a mean of 0.000202 and a standard deviation of 0.00358. LQD produces the lowest range of deviations from the mean and therefore would be considered low risk
+
+``` {r,echo=FALSE}
+plot(myreturns[,3], type='l', main="Daily Percentage Returns on Investment Over 5 Year Period for LQD", ylab="Percentage Returns")
+```
+
+``` {r, include = FALSE}
+mu_LQD = mean(myreturns[,3])
+sigma_LQD = sd(myreturns[,3])
+```
+
+####EEM has a mean of 5.76e-5 but a standard deviation of 0.01374. EEM produces the highest range of rate of returns with the largest standard deviation. The most risky ETF.
+
+``` {r,echo=FALSE}
+plot(myreturns[,4], type='l', main="Daily Percentage Returns on Investment Over 5 Year Period for EEM", ylab="Percentage Returns")
+```
+
+``` {r, include = FALSE}
+mu_EEM = mean(myreturns[,4])
+sigma_EEM = sd(myreturns[,4])
+```
+
+####VNQ has a mean of 0.00054 and a standard deviation of 0.0115. Another risky ETF.
+
+``` {r,echo=FALSE}
+plot(myreturns[,5], type='l', main="Daily Percentage Returns on Investment Over 5 Year Period for ETF", ylab="Percentage Returns")
+```
+
+``` {r, include = FALSE}
+mu_VNQ = mean(myreturns[,5])
+sigma_VNQ = sd(myreturns[,5])
+```
+
+####Initial Investment In All Three Portfolios will be $100,000
+
+``` {r, include = FALSE}
+total_wealth=100000
+```
+
+####Three different Portfolios will be considered.
+
+#####Equal weighting of investment among all 5 ETFs
+
+``` {r}
+holdings1 = total_wealth*c(0.2,0.2,0.2,0.2,0.2)
+```
+
+#####The 'safe-bet' weighting of the investment by investing in the three ETFs with the lowest standard deviation. Favors LQD which has the lowest standard deviation of all the ETFs in this study
+
+``` {r}
+holdings2 = total_wealth*c(0.2,0.2,0.6,0,0)
+```
+
+#####A riskier investment, focusing on the two ETFs with the greatest standard deviation
+
+``` {r}
+holdings3 = total_wealth*c(0,0,0,0.55,0.45)
+```
+
+####The growth of the portfolios will be estimated over a 20 trading day period
+
+``` {r, include = FALSE}
+n_days=20
+```
+
+####The simulation will be run 500 times to produce an accurate estimate of the Value at Risk (VaR)
+
+``` {r, include = FALSE}
+sim1 = foreach(i=1:500, .combine='rbind') %do% {
+  totalwealth1=100000
+  holdings1 = totalwealth1*c(0.2,0.2,0.2,0.2,0.2)
+  wealthtracker1 = rep(0,n_days)
+  for (today in 1:n_days) {
+    holdings1 = totalwealth1*c(0.2,0.2,0.2,0.2,0.2)
+    return.today = resample(myreturns,1,orig.ids=FALSE)
+    holdings1 = holdings1 + holdings1*return.today
+    totalwealth1 = sum(holdings1)
+    wealthtracker1[today] = totalwealth1
+  }
+  wealthtracker1
+}
+
+sim2 = foreach(i=1:500, .combine='rbind') %do% {
+  totalwealth2 = 100000
+  holdings2 = totalwealth2*c(0.2,0.2,0.6,0,0)
+  wealthtracker2 = rep(0,n_days)
+  for (today in 1:n_days) {
+    holdings2 = totalwealth2*c(0.2,0.2,0.6,0,0)
+    return.today = resample(myreturns,1,orig.ids=FALSE)
+    holdings2 = holdings2 + holdings2*return.today
+    totalwealth2 = sum(holdings2)
+    wealthtracker2[today] = totalwealth2
+  }
+  wealthtracker2
+}
+
+sim3 = foreach(i=1:500, .combine='rbind') %do% {
+  totalwealth3=100000
+  holdings3 = totalwealth3*c(0,0,0,0.55,0.45)
+  wealthtracker3 = rep(0,n_days)
+  for (today in 1:n_days) {
+    holdings3 = totalwealth3*c(0,0,0,0.55,0.45)
+    return.today = resample(myreturns,1,orig.ids=FALSE)
+    holdings3 = holdings3 + holdings3*return.today
+    totalwealth3 = sum(holdings3)
+    wealthtracker3[today] = totalwealth3
+  }
+  wealthtracker3
+}
+```
+
+####Calculating the 5% value at risk for each holding
+
+#####Holding 1: Balanced Weight Distribution
+``` {r, echo=FALSE}
+quantile(sim1[,n_days], 0.05) - 100000
+```
+#####Holding 2: 'Safe-bet' Weight Distribution
+``` {r, echo=FALSE}
+quantile(sim2[,n_days], 0.05) - 100000
+```
+#####Holding 3: 'Risky' Weight Distribution
+``` {r, echo=FALSE}
+quantile(sim3[,n_days], 0.05) - 100000
+```
+
+####A Value at Risk (VaR) can best be explained with an example: if a portfolio of stocks has a one-day 5% VaR of $1000, then there is a 5% probability that the portfolio will fall in value by more than $1000 over that one-day period if no trading occurs. Since we are running our simulation over 500 times, we can expect that 5% of those interations will on average return the 5% VaR returned. We ran the simulation 500 times in order to get an average of the 5% VaR for each portfolio distribution.
+
+####The results we as expected given the weighting of the portfolios. The portfolio that was considered 'safer', holdings2, by weighting the ETFs to favor the three ETFs with the lowest standard deviations, had the lowest 5% VaR at -1896. When equal distribution of weight between the five ETFs was used in 'holdings1' produced a 5% VaR that was just about $1700 more than holdings2. The riskiest portfolio, holdings3, which was made up of the two ETFs with the greatest variability in rate of return, produced a 5% VaR that was almost 4 times the 5% VaR of the 'safe-bet'.
+
+####If this simulation is used to predict how real portfolios will respond in the market, then which one is the best depends on the buyer. If the buyer favors a conservative allocation of their wealth, than a distribution like that in holdings2 would be a recommendation. Although it is less likely to produce the same gains as a risker portfolio, is it also less likely to experience the market swings and losses associated with risker investments. A risker portfolio can produce great rewards for the investor if the market is on the rise, however it is also likely to see greater losses if the market experiences a recession. Finally the equal weight portfolio in this simulation was closer to the conservative portfolio that the risker one. If the buyer wanted a truely middle-of-the-road portfolio, they would be advised to invest more in the risker ETFs such as EEM and VNQ to increase their potential earnings at the potential loss of financial stability.
+
+
+
+##Clustering and PCA
+``` {r, include=FALSE}
+wine <- read.csv("wine.csv", header=TRUE)
+```
+
+####We begin by examining the data in our dataset. We have been provided roughly 6500 bottles of wine as our observations, and these bottles are described using eleven chemical properties such as acidity and alcohol percentage.   
+```{r,echo=FALSE}
+head(wine)
+```
+
+####In addition to the chemical properties, the color of each wine is provided: with red or white, as well as a subjective quality of the wine on a 1-10 scale, with our observations having qualities between 3 and 9. 
+
+####If we want to visualize the data, we will need to reduce the dimensionality, as it would be very difficult to visualize in terms of all 11 chemical descriptors. In this case, it would be much easier to visual the data in just two dimensions, so principle component analysis (PCA) will be used to do just that. It should be noted that PCA is senstitive to the relative scaling of the original variables, so they must first be scaled in order to produce better results. 
+
+```{r,echo=FALSE}
+wine.vars = wine[,1:11]
+wine.scaled = scale(wine[,1:11], center=TRUE, scale=TRUE)
+wine.pca <- prcomp(wine.vars, center=TRUE, scale = TRUE)
+```
+
+####PCA will create a number of principle components (PC) equal to the number of variables in our data. Each PC contains a loading of the chemical variables to produce a new variable. If we examine the cumulative proprotion of variance amongst the PCs, we can understand how much of the information of the original data can be described by the combindation of the new variables by looking at the cumulative proportion row.
+
+```{r,echo=FALSE}
+summary(wine.pca)
+```
+
+####We can see that the first 3 PCs contribute to almost 50% of the variance just by themselves, so plotting on just those variables should provide a good dimensional visualize of the data.
+
+####Further, by plotting the variance over each PC, we can see that the amount of variance described by each PC quickly tapers off after the 8th PC, and from the above table, that corresponds to around 95% of the variance.
+
+```{r,echo=FALSE}
+plot(wine.pca, type="l", main="Variance Versus Principle Components")
+```
+
+####Given what we have oberserved so far, we can now plot of our wine data points expressed in terms of PC1 and PC2. For added visual effect, we can also color code each data point in terms of the wine's color, red or white. We see that the PCA analysis does a good job correctly grouping the two colors of wines with a lateral division seperating the majority of the red wines to the left, and the white wines to the right.
+
+```{r,echo=FALSE}
+loadings = wine.pca$rotation
+scores = as.data.frame(wine.pca$x)
+qplot(scores[,1], scores[,2], color=wine$color,xlab='Component 1', ylab='Component 2') + scale_color_manual(values=c("#000000", "#E69F00"))
+```
+
+####PCA is not the only dimensionality reduction technique we can use. Consider the use of clustering via kmeans to allocate a color of wine to each data point based on the datapoint's euchlidean distance from a cluster's center.
+
+####Here is the plot of the kmeans clustering using a number of clusters equal to 2 on the same principle components that we generated with PCA. 
+
+```{r,echo=FALSE}
+cl <- kmeans(wine.scaled,centers=2,nstart=50)
+wine$cluster2 <- as.factor(cl$cluster)
+
+qplot(scores[,1], scores[,2], color=wine$cluster2,xlab='Component 1', ylab='Component 2') + scale_color_manual(values=c("#E69F00","#000000"))
+```
+
+####Just using 2 clusters appears to divide the two colors of wines just as well if not better than just with PCA. Cluster 1 correcly identifies 98.5% of the red wines, and Cluster 2 correctly identifies 98.6.
+
+```{r,echo=FALSE}
+with(wine, table(cluster2,color))
+```
+
+####It is therefore a fair assessment to say that using kmeans is a stronger dimensionality reduction technique than pca as it makes it easier to visually distringuish between the colors of wines in our dataset. This is most easily seen by comparing the two groups and noting the crisp vertical division between the two clusters.
+
+####Shifting our attention over the quality descriptor, we can graph the qualities in our plot of reexpressed data in terms of the two principle components
+
+```{r,echo=FALSE}
+qplot(scores[,1], scores[,2], color=wine$quality,xlab='Component 1', ylab='Component 2')
+```
+
+####Unlike with the color predictor, using PC1 and PC2 does not produce a visually seperate grouping of qualities and we can see each quality distributed across the plot of the data.
+
+####We can also perform kmeans to produce 7 clusters (one for each of the qualities awarded the wines in our dataset) and then compare these clusters to the qualities of the wines in our data.
+
+```{r,echo=FALSE,warning=FALSE}
+cl7 <- kmeans(wine.scaled,centers=7,nstart=1000)
+wine$cluster7 <- as.factor(cl7$cluster)
+qplot(scores[,1], scores[,2], color=wine$cluster7,xlab='Component 1', ylab='Component 2') + scale_color_manual(values=c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00"))
+```
+
+####Here we see a large amount of cross-over between the clusters. It is especially difficult to distinguish clusters 4 and 6 as they appear to be centered almost on top of one another.
+
+####Producing a table showing the distribution of qualities between our 7 clusters shows that a single quality are rarely associated with just one cluster and there are usually an assortment of qualities amongst each. For instance, the quality of 6 is the most numerous amongst the wines in our data set and is evenly distributed amongst many of the clusters.
+
+```{r,echo=FALSE}
+with(wine, table(quality,cluster7))
+```
+
+##Market Segmentation
+``` {r, include=FALSE}
+set.seed(7000)
+socmark <- read.csv("social_marketing.csv", header=TRUE)
+```
+####I first began by cleaning up the data. I did this by removing the columns that would not be relevant in terms of market segments, such as the name of the twitter user, and categories such as chatter, uncategorized or adult.
+
+``` {r, include=FALSE}
+new.socmark = socmark[,c(3:5,7:35)]
+```
+
+####I then normalized the data by dividing each user's tweet by their total tweet count.
+``` {r, include=FALSE}
+normal.socmark = new.socmark/rowSums(new.socmark)
+```
+
+####This provides us with each row representing one user and each column the percentage of their tweets that fall into a particular category.
+
+
+``` {r, echo=FALSE}
+head(normal.socmark)
+```
+
+####I used the process of k-means in order to cluster the data into market segments. K-means involves selecting a number of clusters (market segments) to group the data by. Then the distance between each data point (twitter user) and the center of each cluster is calculated. The data point is then assigned to the nearest cluster. This process is then repeated several hundred times in order to ensure that cluster centers are found that minimize the distance between the center and all data points associated with that cluster. 
+
+####We can perform a quick analysis to determine the optimal number of clusters to use based on minimizing the distances between each data point and its cluster center.
+```{r,echo=FALSE}
+set.seed(7000)
+wss <- (nrow(normal.socmark)-1)*sum(apply(normal.socmark,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(normal.socmark, centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",ylab="Within groups sum of squares")
+```
+
+####The result is the above graph that shows we do not really improve how close the data points are to their cluster centers after the 7th cluster, so we will just divide the data into 7 markest segments.
+
+```{r,echo=FALSE,results="hide"}
+markseg <- kmeans(normal.socmark,centers=7,nstart=500)
+
+aggregate(normal.socmark,by=list(markseg$cluster),FUN=mean)
+
+normal.socmark <- data.frame(normal.socmark, markseg$cluster)
+```
+
+####It is difficult to visualize these clusters in just 2 dimensions, but if plot a hundred data points from our data, we can see how they roughly fall into each cluster. While it might appear as if some users are in overlapping clusters, this is again a product of the number of variables in the data set and the difficulty in visualizing the boundaries between each cluster.
+
+```{r,echo=FALSE}
+new = normal.socmark[c(1:100),]
+cls = normal.socmark[c(1:100),'markseg.cluster']
+
+library(cluster)
+
+clusplot(new, cls, color=TRUE, shade=TRUE,labels=2, lines=0)
+```
+
+####We can now take a look at each of our clusters. I decided that the best way to help explain these clusters is to take the average value for each tweet category among all users in the cluster. Remember that we normalized the data already, so we are returning out of all the tweets of the users in the cluster, the percentage of those of a specific category. I then sorted these to show the top 4 categories.
+
+```{r,echo=FALSE}
+clust1 = subset(normal.socmark,markseg.cluster == 1)
+clust2 = subset(normal.socmark,markseg.cluster == 2)
+clust3 = subset(normal.socmark,markseg.cluster == 3)
+clust4 = subset(normal.socmark,markseg.cluster == 4)
+clust5 = subset(normal.socmark,markseg.cluster == 5)
+clust6 = subset(normal.socmark,markseg.cluster == 6)
+clust7 = subset(normal.socmark,markseg.cluster == 7)
+```
+
+``` {r, echo=FALSE}
+sort_clust1 = sort(sapply(clust1, mean),decreasing=TRUE)
+sort_clust2 = sort(sapply(clust2, mean),decreasing=TRUE)
+sort_clust3 = sort(sapply(clust3, mean),decreasing=TRUE)
+sort_clust4 = sort(sapply(clust4, mean),decreasing=TRUE)
+sort_clust5 = sort(sapply(clust5, mean),decreasing=TRUE)
+sort_clust6 = sort(sapply(clust6, mean),decreasing=TRUE)
+sort_clust7 = sort(sapply(clust7, mean),decreasing=TRUE)
+```
+
+```{r,echo=FALSE}
+print("Business Man")
+sort_clust1[c(2:5)]
+
+
+print("Mid-aged Woman")
+sort_clust2[c(2:5)]
+
+
+print("Young Professional")
+sort_clust3[c(2:5)]
+
+
+print("College Male")
+sort_clust4[c(2:5)]
+
+
+print("Father")
+sort_clust5[c(2:5)]
+
+
+print("Health Enthusiast")
+sort_clust6[c(2:5)]
+
+
+print("Post-College Arts & science Major")
+sort_clust7[c(2:5)]
+```
+
+####These market segments have been labled based on common interests among the users as seen by the categories of their tweets. Please note that photo sharing is common among several of the segments and has been used to guess the age group of the segment as younger users are more likely to share their photos than older twitter users. Based on your company's branding, I would recommend the 'Health Enthusiast' market segment be targeted.
