@@ -102,21 +102,21 @@ train_corpus = Corpus(VectorSource(all_docs))
 names(train_corpus) = file_list
 ```
 
-####The corpus will need to be cleaned up in order to produce the best models. This clean up included setting all words to lowercase for easier comparision, excluding numbers, punctuation, and whitespace and removing stop words. Stop words are words which do not contain important signifigance to be used in Search Queries. The words filtered in this example are from the SMART information retrieval system.
+####The corpus will need to be cleaned up in order to produce the best models. This clean up included setting all words to lowercase for easier comparision, excluding numbers, punctuation, and whitespace and removing stop words. Stop words are words which do not contain important signifigance to be used in Search Queries.
 
 ```{r,echo=FALSE}
 train_corpus = tm_map(train_corpus, content_transformer(tolower)) 
 train_corpus = tm_map(train_corpus, content_transformer(removeNumbers)) 
 train_corpus = tm_map(train_corpus, content_transformer(removePunctuation)) 
 train_corpus = tm_map(train_corpus, content_transformer(stripWhitespace)) 
-train_corpus = tm_map(train_corpus, content_transformer(removeWords), stopwords("SMART"))
+train_corpus = tm_map(train_corpus, content_transformer(removeWords), stopwords("en"))
 ```
 
-####The end result is a document term matrix of the 2500 documents and the 1389 terms that occur in at least 2.5 percent of the documents. Terms that occur in less than 2.5 percent of the documents are considered sparse and have been removed.
+####The end result is a document term matrix of the 2500 documents and the 782 terms that occur in at least 5 percent of the documents. Terms that occur in less than 5 percent of the documents are considered sparse and have been removed.
 
-```{r,include=FALSE}
+```{r,include=FALSE,results=FALSE}
 DTM_train = DocumentTermMatrix(train_corpus)
-DTM_train = removeSparseTerms(DTM_train, 0.975)
+DTM_train = removeSparseTerms(DTM_train, 0.95)
 DTM_train_df = as.data.frame(inspect(DTM_train))
 ```
 
@@ -144,13 +144,15 @@ test_corpus = tm_map(test_corpus, content_transformer(tolower))
 test_corpus = tm_map(test_corpus, content_transformer(removeNumbers)) 
 test_corpus = tm_map(test_corpus, content_transformer(removePunctuation)) 
 test_corpus = tm_map(test_corpus, content_transformer(stripWhitespace)) 
-test_corpus = tm_map(test_corpus, content_transformer(removeWords), stopwords("SMART"))
+test_corpus = tm_map(test_corpus, content_transformer(removeWords), stopwords("en"))
 
 dict = NULL
 dict = dimnames(DTM_train)[[2]]
+```
 
+```{r,include=FALSE,results=FALSE}
 DTM_test = DocumentTermMatrix(test_corpus, list(dictionary=dict))
-DTM_test = removeSparseTerms(DTM_test, 0.975)
+DTM_test = removeSparseTerms(DTM_test, 0.95)
 DTM_test_df = as.data.frame(inspect(DTM_test))
 ```
 
@@ -158,33 +160,36 @@ DTM_test_df = as.data.frame(inspect(DTM_test))
 ####The first model we will use is Naive Bayes which assumes independent weights between each descriptor and is suited for when the dimensionality of the inputs is high, like with a document term matix.
 
 ```{r,echo=FALSE}
-NB_model = naiveBayes(x=DTM_train_df, y=as.factor(train_labels), laplace=1)
+NB_model = naiveBayes(x=DTM_train_df, y=as.factor(train_labels))
 
 NB_pred = predict(NB_model, DTM_test_df)
 
-NB_table = as.data.frame(table(NB_pred,test_labels))
+NB_table = table(NB_pred,test_labels)
+
+NB_df = as.data.frame(NB_table)
+
 ```
 
-####If we plot the frequency of the predicted classes compared to the actual classes of each document, we can see that the Naive-Bayes model appears to over classify documents with specific authors. For instance, we can see that the model frequently classified documents as being authored by Lydia Zajc, David Lawder, and Alan Crosby.
+####Looking at the results of the Naive Bayes model in predicting the authors for the test data set, the model correctly predicted the author only `r sum(NB_table[row(NB_table)==col(NB_table)])/sum(NB_table)*100` percent of the time. We can then plot the frequency of how often the model classified a document to a specific author compared to the actual author of each document. The diagonal line running from the bottom left to the top right represents correct classifications. The lighter the color of each pixel, the more freuquent that particular classification occured. We can see that the Naive-Bayes model appears to over classify documents for certain authors, thus increasing the rate of incorrect classifications. For instance, we can see that the model frequently classified documents as being authored by Peter Humphrey, David Lawder, and Alan Crosby.
 
 ```{r,echo=FALSE}
-plot = ggplot(NB_table)
-plot + geom_tile(aes(x=test_labels, y=NB_pred, fill=Freq)) + scale_x_discrete(name="Actual Class") + scale_y_discrete(name="Predicted Class") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+plot = ggplot(NB_df)
+plot + geom_tile(aes(x=test_labels, y=NB_pred, fill=Freq)) + scale_x_discrete(name="Actual Classification") + ggtitle("Predicted Versus Actual Classifications for Naive Bayes Model") + scale_y_discrete(name="Predicted Classification") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
-####This same information can be seen in the following table which shows the model's sensitivity, the proportion of positive classifications that were labeled as such, and the model's specificity, the proportion of negative classifications taht were labeled as such. Here we see for authors such as Lydia Zajc, David Lawder, and Alan Crosby, there is low specificifty, signifying that the model incorrectly labeled documents as being associated with that author frequently. The sensitivity of the model is also low, as only Lydia Zajc's works were identified correctly with a rate over 90 percent. Combined with the low specificity, we can conclude the model over-classified documents as being authored by her and had difficulty distinguishing her work from the other authors.
+####This same information can be seen in the following table which shows the model's sensitivity, the proportion of positive classifications that were labeled as such, and the model's specificity, the proportion of negative classifications taht were labeled as such. Here we see for authors such as Peter Humphrey, David Lawder, and Alan Crosby, there is low specificifty, signifying that the model incorrectly labeled documents as being associated with that author frequently. The sensitivity of the model is also low, as only Peter Humphrey's works were positively identified with a rate of 90 percent. As that author also has a lower specificity, we can conclude the model over-classified documents as being authored by him and had difficulty distinguishing other author's work from his.
 
 ```{r,echo=FALSE}
-NB_conf = confusionMatrix(table(NB_pred,test_labels))
+NB_conf = confusionMatrix(NB_table)
 NB_conf_df = as.data.frame(NB_conf$byClass)
 NB_conf_df[order(-NB_conf_df$Sensitivity),1:2]
 ```
 
 ####The second model that we will use is Random Forests. This classification model constructs a number of decision trees and from them selects the best tree with the lowest classification error. 
 
-####Before we create this model, we need to add empty columns in the test data set for words that appear in the training data, but not in the test data. This needs to be accomplished as RandomForest requires the same variables in both the training and test data sets, unlike Naive-Bayes.
+####Before we create this model, we need to add empty columns in the test data set for words that appear in the training data, but not in the test data. This needs to be accomplished as Random Forests requires the same variables in both the training and test data sets, unlike Naive-Bayes.
 
-```{r,echo=FALSE}
+```{r,echo=FALSE,results=FALSE}
 DTM_test = as.matrix(DTM_test)
 DTM_train = as.matrix(DTM_train)
 
@@ -196,23 +201,26 @@ DTM_test_new = rbind.fill(col_x, col_y)
 DTM_test_df = as.data.frame(DTM_test_new)
 
 
-RF_model = randomForest(x=DTM_train_df, y=as.factor(train_labels), mtry=3, ntree=200)
+RF_model = randomForest(x=DTM_train_df, y=as.factor(train_labels), ntree=400)
 RF_pred = predict(RF_model, data=DTM_test_new)
 
-RF_table = as.data.frame(table(RF_pred,test_labels))
+
+RF_table = table(RF_pred,test_labels)
+
+RF_df = as.data.frame(table(RF_pred,test_labels))
 ```
 
-####If we plot the frequency of the predicted classes compared to the actual classes of each document, we can see that the random forest model was a much stronger predictor than the Naive-Bayes. The light blue diagonal line signifies an increased frequency of the model classify the documents to the correct author. We do not see the same problem were the Naive-Bayes too frequently classified works as belonging to specific authors due to its inability to distinguish those authors. 
+####Looking at the results of our model, the Random Forest correctly matched the author to their work  `r sum(RF_table[row(RF_table)==col(RF_table)])/sum(RF_table)*100` percent of time with the testing dataset. This is more than twice that of the Naive-Bayes model. If we plot the frequency of how often the model classified a document to a specific author compared to the actual author of each document, we can see that the Random Forest model was a much stronger predictor than the Naive-Bayes. This is indicated by the diagonal line corresponding to correct classifications being light blue to the majority of the authors. We do not see the same problem with this model as the Naive Bayes, where the Naive-Bayes too frequently classified works as belonging to specific authors due to its inability to distinguish those authors. 
 
 ```{r,echo=FALSE}
-plot = ggplot(RF_table)
-plot + geom_tile(aes(x=test_labels, y=RF_pred, fill=Freq)) + scale_x_discrete(name="Actual Class") + scale_y_discrete(name="Predicted Class") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+plot = ggplot(RF_df)
+plot + geom_tile(aes(x=test_labels, y=RF_pred, fill=Freq)) + ggtitle("Predicted Versus Actual Classifications for Random Forest Model") + scale_x_discrete(name="Actual Classification") + scale_y_discrete(name="Predicted Classification") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
-####We see that the random forest model produced a sensitivity rate of over 90 percent for 10 authors and the specificity rate was over 98 percent for all the authors. These are much more accurate results than the Naive-Bayes model, as it accurately predicted all the authors for at least some of the documents. The Naive-Bayes model failed to classify any documents as belonging to 16 authors, causing the sensitivity rating to be 0. We still see the Random Forest model having difficulty with a few authors, such as Samuel Perry and William Kazer. We can conclude that those authors did not write in a mannor that allowed the model to easily distinguish their writing style from other authors.
+####We see that the Random Forest model produced a sensitivity rate of over 90 percent for 10 authors and the specificity rate was over 98 percent for all the authors. These are much more accurate results than the Naive-Bayes model, as it accurately predicted all the authors for at least some of the documents. The Naive-Bayes model failed to classify any documents as belonging to 4 authors, which resulted in the sensitivity rating to be 0. We can still see the Random Forest model having difficulty with a few authors, such as Mure Dickie and Scott Hillis. We can conclude that those authors did not write in a mannor that allowed the model to easily distinguish their writing style from other authors.
 
 ```{r,echo=FALSE}
-RF_conf = confusionMatrix(table(RF_pred,test_labels))
+RF_conf = confusionMatrix(RF_table)
 RF_conf_df = as.data.frame(RF_conf$byClass)
 RF_conf_df[order(-RF_conf_df$Sensitivity),1:2]
 ```
