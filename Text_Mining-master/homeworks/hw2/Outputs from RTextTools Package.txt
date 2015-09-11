@@ -1,0 +1,47 @@
+Outputs from RTextTools Package
+
+Outputs generated from the yelp review data using a subset of 500 reviews. 250 used as the training set and 250 used as the testing set. Additionally, the follwing classification models were used:
+
+	1 - RF = random forest
+	2 - BOOSTING = boosting
+	3 - BAGGING = bagging
+	4 - SVM = support vector machines
+	5 - SLDA = scaled linear discriminant analysis
+
+> create_ensembleSummary(analytics@document_summary)
+       n-ENSEMBLE COVERAGE n-ENSEMBLE RECALL
+n >= 1                1.00              0.41
+n >= 2                1.00              0.41
+n >= 3                0.88              0.42
+n >= 4                0.53              0.42
+n >= 5                0.22              0.44
+> RF = cross_validate(container, 5, "RF")
+Fold 1 Out of Sample Accuracy = 0.4444444
+Fold 2 Out of Sample Accuracy = 0.3762376
+Fold 3 Out of Sample Accuracy = 0.4554455
+Fold 4 Out of Sample Accuracy = 0.3333333
+Fold 5 Out of Sample Accuracy = 0.4065934
+> BOOSTING = cross_validate(container, 5, "BOOSTING")
+Fold 1 Out of Sample Accuracy = 0.6585366
+Fold 2 Out of Sample Accuracy = 0.6767677
+Fold 3 Out of Sample Accuracy = 0.5670103
+Fold 4 Out of Sample Accuracy = 0.5277778
+Fold 5 Out of Sample Accuracy = 0.5614035
+> BAGGING = cross_validate(container, 5, "BAGGING")
+Fold 1 Out of Sample Accuracy = 0.4479167
+Fold 2 Out of Sample Accuracy = 0.4059406
+Fold 3 Out of Sample Accuracy = 0.3516484
+Fold 4 Out of Sample Accuracy = 0.2844828
+Fold 5 Out of Sample Accuracy = 0.40625
+> SVM = cross_validate(container, 5, "SVM")
+Fold 1 Out of Sample Accuracy = 0.3684211
+Fold 2 Out of Sample Accuracy = 0.4095238
+Fold 3 Out of Sample Accuracy = 0.3563218
+Fold 4 Out of Sample Accuracy = 0.4056604
+Fold 5 Out of Sample Accuracy = 0.4318182
+> SLDA = cross_validate(container, 5, "SLDA")
+Fold 1 Out of Sample Accuracy = 0.3555556
+Fold 2 Out of Sample Accuracy = 0.4081633
+Fold 3 Out of Sample Accuracy = 0.4352941
+Fold 4 Out of Sample Accuracy = 0.4122807
+Fold 5 Out of Sample Accuracy = 0.4070796
