@@ -16,3 +16,7 @@ Weiss\ Predictive\ Text\ Mining.pdf
 
 # Data #
 data/
+*.Rproj*
+*.RData
+*.Rhistory
+.Rproj.user

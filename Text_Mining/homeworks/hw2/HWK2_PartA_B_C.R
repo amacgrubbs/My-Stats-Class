@@ -4,97 +4,140 @@ library(nnet)
 library(tree)
 library(caret)
 
-
-
 yelp_data = read.csv("Yelp Data Restaurant Reviews Ratings.csv")
+yelp_data = yelp_data[-7255,]
 yelp_data$rating = ifelse(yelp_data$stars > 3,1,0)
-yelp_500 = yelp_data[1:1000,]
 
-yelp_matrix = create_matrix(yelp_500$Review, language = "english", removeNumbers = TRUE, stemWords = TRUE, removeSparseTerms = .90)
-num_container = create_container(yelp_500[,2:20], yelp_500$rating, trainSize = 1:250, testSize = 251:500, virgin = FALSE)
+#yelp_500 = yelp_data[1:500,]
 
-RF = train_model(num_container, "RF")
-BOOSTING = train_model(num_container, "BOOSTING")
-BAGGING = train_model(num_container, "BAGGING")
-SVM = train_model(num_container, "SVM")
-SLDA = train_model(num_container, "SLDA")
+#num_container = create_container(yelp_data[,2:20], yelp_data$rating, trainSize = 1:15000, testSize = 15001:19998, virgin = FALSE)
 
-RF_CLASSIFY = classify_model(num_container, RF)
-BOOSTING_CLASSIFY = classify_model(num_container, BOOSTING)
-BAGGING_CLASSIFY = classify_model(num_container, BAGGING)
-SVM_CLASSIFY = classify_model(num_container, SVM)
-SLDA_CLASSIFY = classify_model(num_container, SLDA)
+#Function to balance dataset:
+#for col range use the ranges (startCol:endCol)
+balanced_data <- function(df,col_range, tSplit,Vsplit){
+  index <- c(1:nrow(df))
+  train = sample(index, length(index)*tSplit)
+  test = index[-train]
+  min = min(table(df[train,Vsplit]))
+  max = max(table(df[train,Vsplit]))
+  splitCol = df[train,Vsplit]
+  smaller_col = as.integer(names(table(splitCol)))[which(table(splitCol)==min)]
+  larger_col = as.integer(names(table(splitCol)))[which(table(splitCol)==max)]
+  df2 = data.frame(df[train,Vsplit])
+  names(df2) <- 'rating'
+  train_index_1 = sample(which(df2==larger_col),min)
+  train_index_0 = which(df2==smaller_col)
+  train_index = c(train_index_1,train_index_0)
+  ret_container = create_container(df[,col_range], df$rating, trainSize = train_index, testSize = test, virgin = FALSE)
+  return(ret_container)
+}
 
-analytics = create_analytics(num_container, cbind(RF_CLASSIFY, BOOSTING_CLASSIFY, BAGGING_CLASSIFY, SVM_CLASSIFY, SLDA_CLASSIFY))
-summary(analytics)
+num_container = balanced_data(yelp_data,2:20,0.75,22)
 
-topic_summary = analytics@label_summary
-alg_summary = analytics@algorithm_summary
-ens_summary = analytics@ensemble_summary
-doc_summary = analytics@document_summary
+num_RF = train_model(num_container, "RF")
+num_BOOSTING = train_model(num_container, "BOOSTING")
+num_SVM = train_model(num_container, "SVM")
 
-RF = cross_validate(num_container, 5, "RF")
-BOOSTING = cross_validate(num_container, 5, "BOOSTING")
-BAGGING = cross_validate(num_container, 5, "BAGGING")
-SVM = cross_validate(num_container, 5, "SVM")
-SLDA = cross_validate(num_container, 5, "SLDA")
+num_RF_CLASSIFY = classify_model(num_container, num_RF)
+num_BOOSTING_CLASSIFY = classify_model(num_container, num_BOOSTING)
+num_SVM_CLASSIFY = classify_model(num_container, num_SVM)
+
+num_analytics = create_analytics(num_container, cbind(num_RF_CLASSIFY, num_BOOSTING_CLASSIFY, num_SVM_CLASSIFY))
+
+num_FOREST_CM = confusionMatrix(num_analytics@document_summary$MANUAL_CODE,num_analytics@document_summary$FORESTS_LABEL)
+#num_FOREST_CM$overall[1]
+
+num_BOOST_CM = confusionMatrix(num_analytics@document_summary$MANUAL_CODE,num_analytics@document_summary$LOGITBOOST_LABEL)
+#num_BOOST_CM$overall[1]
+
+num_SVM_CM = confusionMatrix(num_analytics@document_summary$MANUAL_CODE,num_analytics@document_summary$SVM_LABEL)
+#num_SVM_CM$overall[1]
 
 
+num_RF_CROSS = cross_validate(num_container, 5, "RF")
+num_BOOSTING_CROSS = cross_validate(num_container, 5, "BOOSTING")
+num_SVM_CROSS = cross_validate(num_container, 5, "SVM")
 
-RF = train_model(container, "RF")
-BOOSTING = train_model(container, "BOOSTING")
-BAGGING = train_model(container, "BAGGING")
-SVM = train_model(container, "SVM")
-SLDA = train_model(container, "SLDA")
+#num_RF_CROSS$meanAccuracy
 
-RF_CLASSIFY = classify_model(container, RF)
-BOOSTING_CLASSIFY = classify_model(container, BOOSTING)
-BAGGING_CLASSIFY = classify_model(container, BAGGING)
-SVM_CLASSIFY = classify_model(container, SVM)
-SLDA_CLASSIFY = classify_model(container, SLDA)
+#num_BOOSTING_CROSS$meanAccuracy
 
-analytics = create_analytics(container, cbind(RF_CLASSIFY, BOOSTING_CLASSIFY, BAGGING_CLASSIFY, SVM_CLASSIFY, SLDA_CLASSIFY))
-summary(analytics)
+#num_SVM_CROSS$meanAccuracy
 
-topic_summary = analytics@label_summary
-alg_summary = analytics@algorithm_summary
-ens_summary = analytics@ensemble_summary
-doc_summary = analytics@document_summary
 
-RF = cross_validate(container, 5, "RF")
-BOOSTING = cross_validate(container, 5, "BOOSTING")
-BAGGING = cross_validate(container, 5, "BAGGING")
-SVM = cross_validate(container, 5, "SVM")
-SLDA = cross_validate(container, 5, "SLDA")
+yelp_matrix = create_matrix(yelp_data$Review, language = "english", removeNumbers = TRUE, stemWords = TRUE, removeSparseTerms = .90)
+#text_container = create_container(yelp_matrix, yelp_data$rating, trainSize = 1:15000, testSize = 15001:19998, virgin = FALSE)
 
-new = as.data.frame(as.matrix(yelp_matrix))
+text_df = as.data.frame(as.matrix(yelp_matrix))
 
-both=cbind(new,yelp_500[,2:20])
+mixed=cbind(text_df,yelp_data[,2:22])
 
-both_container = create_container(both, yelp_500$rating, trainSize = 1:250, testSize = 251:500, virgin = FALSE)
+text_container = balanced_data(mixed,1:92,0.75,113)
 
-RF = train_model(both_container, "RF")
-BOOSTING = train_model(both_container, "BOOSTING")
-BAGGING = train_model(both_container, "BAGGING")
-SVM = train_model(both_container, "SVM")
-SLDA = train_model(both_container, "SLDA")
+text_RF = train_model(text_container, "RF")
+text_BOOSTING = train_model(text_container, "BOOSTING")
+text_SVM = train_model(text_container, "SVM")
 
-RF_CLASSIFY = classify_model(both_container, RF)
-BOOSTING_CLASSIFY = classify_model(both_container, BOOSTING)
-BAGGING_CLASSIFY = classify_model(both_container, BAGGING)
-SVM_CLASSIFY = classify_model(both_container, SVM)
-SLDA_CLASSIFY = classify_model(both_container, SLDA)
+text_RF_CLASSIFY = classify_model(text_container, text_RF)
+text_BOOSTING_CLASSIFY = classify_model(text_container, text_BOOSTING)
+text_SVM_CLASSIFY = classify_model(text_container, text_SVM)
 
-analytics = create_analytics(both_container, cbind(RF_CLASSIFY, BOOSTING_CLASSIFY, BAGGING_CLASSIFY, SVM_CLASSIFY, SLDA_CLASSIFY))
-summary(analytics)
+text_analytics = create_analytics(text_container, cbind(text_RF_CLASSIFY, text_BOOSTING_CLASSIFY, text_SVM_CLASSIFY))
 
-topic_summary = analytics@label_summary
-alg_summary = analytics@algorithm_summary
-ens_summary = analytics@ensemble_summary
-doc_summary = analytics@document_summary
+text_FOREST_CM = confusionMatrix(text_analytics@document_summary$MANUAL_CODE,text_analytics@document_summary$FORESTS_LABEL)
+#text_FOREST_CM$overall[1]
 
-RF = cross_validate(both_container, 5, "RF")
-BOOSTING = cross_validate(both_container, 5, "BOOSTING")
-BAGGING = cross_validate(both_container, 5, "BAGGING")
-SVM = cross_validate(both_container, 5, "SVM")
-SLDA = cross_validate(both_container, 5, "SLDA")
+text_BOOST_CM = confusionMatrix(text_analytics@document_summary$MANUAL_CODE,text_analytics@document_summary$LOGITBOOST_LABEL)
+#text_BOOST_CM$overall[1]
+
+text_SVM_CM = confusionMatrix(text_analytics@document_summary$MANUAL_CODE,text_analytics@document_summary$SVM_LABEL)
+#text_SVM_CM$overall[1]
+
+text_RF_CROSS = cross_validate(text_container, 5, "RF")
+text_BOOSTING_CROSS = cross_validate(text_container, 5, "BOOSTING")
+text_SVM_CROSS = cross_validate(text_container, 5, "SVM")
+
+#text_RF_CROSS$meanAccuracy
+
+#text_BOOSTING_CROSS$meanAccuracy
+
+#text_SVM_CROSS$meanAccuracy
+
+
+#mixed_container = create_container(mixed, yelp_data$rating, trainSize = 1:15000, testSize = 15001:19998, virgin = FALSE)
+
+mixed_container = balanced_data(mixed,1:111,0.75,113)
+
+
+mixed_RF = train_model(mixed_container, "RF")
+mixed_BOOSTING = train_model(mixed_container, "BOOSTING")
+mixed_SVM = train_model(mixed_container, "SVM")
+
+mixed_RF_CLASSIFY = classify_model(mixed_container, mixed_RF)
+mixed_BOOSTING_CLASSIFY = classify_model(mixed_container, mixed_BOOSTING)
+mixed_SVM_CLASSIFY = classify_model(mixed_container, mixed_SVM)
+
+mixed_analytics = create_analytics(mixed_container, cbind(mixed_RF_CLASSIFY, mixed_BOOSTING_CLASSIFY, mixed_SVM_CLASSIFY))
+
+mixed_FOREST_CM = confusionMatrix(mixed_analytics@document_summary$MANUAL_CODE,mixed_analytics@document_summary$FORESTS_LABEL)
+#mixed_FOREST_CM$overall[1]
+
+mixed_BOOST_CM = confusionMatrix(mixed_analytics@document_summary$MANUAL_CODE,mixed_analytics@document_summary$LOGITBOOST_LABEL)
+#mixed_BOOST_CM$overall[1]
+
+mixed_SVM_CM = confusionMatrix(mixed_analytics@document_summary$MANUAL_CODE,mixed_analytics@document_summary$SVM_LABEL)
+#mixed_SVM_CM$overall[1]
+
+mixed_RF_CROSS = cross_validate(mixed_container, 5, "RF")
+mixed_BOOSTING_CROSS = cross_validate(mixed_container, 5, "BOOSTING")
+mixed_SVM_CROSS = cross_validate(mixed_container, 5, "SVM")
+
+#mixed_RF_CROSS$meanAccuracy
+
+#mixed_BOOSTING_CROSS$meanAccuracy
+
+#mixed_SVM_CROSS$meanAccuracy
+
+accuracy_data <- data.frame(Num=c(num_FOREST_CM$overall[1],num_BOOST_CM$overall[1],num_SVM_CM$overall[1]),Num_X=c(num_RF_CROSS$meanAccuracy,num_BOOSTING_CROSS$meanAccuracy,num_SVM_CROSS$meanAccuracy),Text=c(text_FOREST_CM$overall[1],text_BOOST_CM$overall[1],text_SVM_CM$overall[1]),Text_X=c(text_RF_CROSS$meanAccuracy,text_BOOSTING_CROSS$meanAccuracy,text_SVM_CROSS$meanAccuracy),Mixed=c(mixed_FOREST_CM$overall[1],mixed_BOOST_CM$overall[1],mixed_SVM_CM$overall[1]),Mixed_X=c(mixed_RF_CROSS$meanAccuracy,mixed_BOOSTING_CROSS$meanAccuracy,mixed_SVM_CROSS$meanAccuracy))
+
+barplot(as.matrix(accuracy_data),beside=TRUE,ylab="Accuracy",ylim=c(0.3,1),xpd=FALSE)
