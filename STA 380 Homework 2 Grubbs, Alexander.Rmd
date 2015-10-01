@@ -1,0 +1,258 @@
+---
+title: 'STA 380 Homework 2: Grubbs, Alexander'
+author: "Alexander Grubbs"
+date: "August 18, 2015"
+output: html_document
+---
+
+#Flight at ABIA
+
+####The provided data set contains information on every commercial flight in 2008 that either departed from or landed at Austin-Bergstrom International Airport. 
+
+####From this data, the below figure was produced. As can be seen, the best times to avoid flight delays is to travel early in the morning before 10AM. After that time, the average delay increases to over 40 minutes. This result is intuitive as delays throughout the day can be cumulative and affect later flights increasing the delays for passangers on those flights.
+
+```{r,echo=FALSE,message=FALSE}
+library(plyr)
+ABIA = read.csv("ABIA.csv",header=TRUE)
+ABIA = na.omit(ABIA)
+
+timeofday = function(x) {
+  if(x>=500 & x < 600)
+    return(500)
+  if(x>=600 & x < 700)
+    return(600)
+  if(x>=700 & x < 800)
+    return(700)
+  if(x>=800 & x < 900)
+    return(800)
+  if(x>=900 & x < 1000)
+    return(900)
+  if(x>=1000 & x < 1100)
+    return(1000)
+  if(x>=1100 & x < 1200)
+    return(1100)
+  if(x>=1200 & x < 1300)
+    return(1200)
+  if(x>=1300 & x < 1400)
+    return(1300)
+  if(x>=1400 & x < 1500)
+    return(1400)
+  if(x>=1500 & x < 1600)
+    return(1500)
+  if(x>=1600 & x < 1700)
+    return(1600)
+  if(x>=1700 & x < 1800)
+    return(1700)
+  if(x>=1800 & x < 1900)
+    return(1800)
+  if(x>=1900 & x < 2000)
+    return(1900)
+  if(x>=2000 & x < 2100)
+    return(2000)
+  if(x>=2100 & x < 2200)
+    return(2100)
+  if(x>=2200 & x < 2300)
+    return(2200)
+  if(x>=2300 & x < 2400)
+    return(2300)
+  if(x>=0 & x < 100)
+    return(2400)
+}
+
+ABIA['TimeofDay'] = sapply(ABIA$CRSDepTime, timeofday)
+new = ddply(ABIA,.(ABIA$TimeofDay), summarise, mean = mean(DepDelay))
+plot(new$'ABIA$TimeofDay',new$mean,main='Average Flight Delay Per Time of Day',xlab='Time of Day (Military Time)',ylab='Average Delay in Minutes')
+```
+
+
+
+#Author Attribution
+
+####Here we are presented with around 50 different articles from each of 50 different authors. This data will be used to create a corpus of the words used by the author in their articles. From this, we will be creating two seperate models for predicting the author of an article based on the article's content. The two models will be Naive-Bayes and Random Forest.
+
+```{r,include=FALSE,message=FALSE}
+library(tm)
+library(randomForest)
+library(e1071)
+library(rpart)
+library(ggplot2)
+library(caret)
+set.seed(1)
+```
+
+```{r,echo=FALSE}
+readerPlain = function(fname){
+  readPlain(elem=list(content=readLines(fname)), id=fname, language='en') }
+
+author_dirs = Sys.glob('./ReutersC50/C50train/*')
+file_list = NULL
+train_labels = NULL
+for(author in author_dirs) {
+  author_name = substring(author, first=23)
+  files_to_add = Sys.glob(paste0(author, '/*.txt'))
+  file_list = append(file_list, files_to_add)
+  train_labels = append(train_labels, rep(author_name, length(files_to_add)))
+}
+
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+train_corpus = Corpus(VectorSource(all_docs))
+names(train_corpus) = file_list
+```
+
+####The corpus will need to be cleaned up in order to produce the best models. This clean up included setting all words to lowercase for easier comparision, excluding numbers, punctuation, and whitespace and removing stop words. Stop words are words which do not contain important signifigance to be used in Search Queries.
+
+```{r,echo=FALSE}
+train_corpus = tm_map(train_corpus, content_transformer(tolower)) 
+train_corpus = tm_map(train_corpus, content_transformer(removeNumbers)) 
+train_corpus = tm_map(train_corpus, content_transformer(removePunctuation)) 
+train_corpus = tm_map(train_corpus, content_transformer(stripWhitespace)) 
+train_corpus = tm_map(train_corpus, content_transformer(removeWords), stopwords("en"))
+```
+
+####The end result is a document term matrix of the 2500 documents and the 782 terms that occur in at least 5 percent of the documents. Terms that occur in less than 5 percent of the documents are considered sparse and have been removed.
+
+```{r,include=FALSE,results=FALSE}
+DTM_train = DocumentTermMatrix(train_corpus)
+DTM_train = removeSparseTerms(DTM_train, 0.95)
+DTM_train_df = as.data.frame(inspect(DTM_train))
+```
+
+####We will be creating both a training corpus, for the creation of our models, and a testing corpus, to be used to find how well our models do at predicting the author's identity given a new set of documents.
+
+```{r,include=FALSE}
+author_dirs = Sys.glob('./ReutersC50/C50test/*')
+file_list = NULL
+test_labels = NULL
+for(author in author_dirs) {
+  author_name = substring(author, first=22)
+  files_to_add = Sys.glob(paste0(author, '/*.txt'))
+  file_list = append(file_list, files_to_add)
+  test_labels = append(test_labels, rep(author_name, length(files_to_add)))
+}
+
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+test_corpus = Corpus(VectorSource(all_docs))
+names(test_corpus) = file_list
+
+test_corpus = tm_map(test_corpus, content_transformer(tolower)) 
+test_corpus = tm_map(test_corpus, content_transformer(removeNumbers)) 
+test_corpus = tm_map(test_corpus, content_transformer(removePunctuation)) 
+test_corpus = tm_map(test_corpus, content_transformer(stripWhitespace)) 
+test_corpus = tm_map(test_corpus, content_transformer(removeWords), stopwords("en"))
+
+dict = NULL
+dict = dimnames(DTM_train)[[2]]
+```
+
+```{r,include=FALSE,results=FALSE}
+DTM_test = DocumentTermMatrix(test_corpus, list(dictionary=dict))
+DTM_test = removeSparseTerms(DTM_test, 0.95)
+DTM_test_df = as.data.frame(inspect(DTM_test))
+```
+
+
+####The first model we will use is Naive Bayes which assumes independent weights between each descriptor and is suited for when the dimensionality of the inputs is high, like with a document term matix.
+
+```{r,echo=FALSE}
+NB_model = naiveBayes(x=DTM_train_df, y=as.factor(train_labels))
+
+NB_pred = predict(NB_model, DTM_test_df)
+
+NB_table = table(NB_pred,test_labels)
+
+NB_df = as.data.frame(NB_table)
+
+```
+
+####Looking at the results of the Naive Bayes model in predicting the authors for the test data set, the model correctly predicted the author only `r sum(NB_table[row(NB_table)==col(NB_table)])/sum(NB_table)*100` percent of the time. We can then plot the frequency of how often the model classified a document to a specific author compared to the actual author of each document. The diagonal line running from the bottom left to the top right represents correct classifications. The lighter the color of each pixel, the more freuquent that particular classification occured. We can see that the Naive-Bayes model appears to over classify documents for certain authors, thus increasing the rate of incorrect classifications. For instance, we can see that the model frequently classified documents as being authored by Peter Humphrey, David Lawder, and Alan Crosby.
+
+```{r,echo=FALSE}
+plot = ggplot(NB_df)
+plot + geom_tile(aes(x=test_labels, y=NB_pred, fill=Freq)) + scale_x_discrete(name="Actual Classification") + ggtitle("Predicted Versus Actual Classifications for Naive Bayes Model") + scale_y_discrete(name="Predicted Classification") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+####This same information can be seen in the following table which shows the model's sensitivity, the proportion of positive classifications that were labeled as such, and the model's specificity, the proportion of negative classifications taht were labeled as such. Here we see for authors such as Peter Humphrey, David Lawder, and Alan Crosby, there is low specificifty, signifying that the model incorrectly labeled documents as being associated with that author frequently. The sensitivity of the model is also low, as only Peter Humphrey's works were positively identified with a rate of 90 percent. As that author also has a lower specificity, we can conclude the model over-classified documents as being authored by him and had difficulty distinguishing other author's work from his.
+
+```{r,echo=FALSE}
+NB_conf = confusionMatrix(NB_table)
+NB_conf_df = as.data.frame(NB_conf$byClass)
+NB_conf_df[order(-NB_conf_df$Sensitivity),1:2]
+```
+
+####The second model that we will use is Random Forests. This classification model constructs a number of decision trees and from them selects the best tree with the lowest classification error. 
+
+####Before we create this model, we need to add empty columns in the test data set for words that appear in the training data, but not in the test data. This needs to be accomplished as Random Forests requires the same variables in both the training and test data sets, unlike Naive-Bayes.
+
+```{r,echo=FALSE,results=FALSE}
+DTM_test = as.matrix(DTM_test)
+DTM_train = as.matrix(DTM_train)
+
+col_x <- data.frame(DTM_test[,intersect(colnames(DTM_test), colnames(DTM_train))])
+col_y <- read.table(textConnection(""), col.names = colnames(DTM_train), colClasses = "integer")
+
+DTM_test_new = rbind.fill(col_x, col_y)
+
+DTM_test_df = as.data.frame(DTM_test_new)
+
+
+RF_model = randomForest(x=DTM_train_df, y=as.factor(train_labels), ntree=400)
+RF_pred = predict(RF_model, data=DTM_test_new)
+
+
+RF_table = table(RF_pred,test_labels)
+
+RF_df = as.data.frame(table(RF_pred,test_labels))
+```
+
+####Looking at the results of our model, the Random Forest correctly matched the author to their work  `r sum(RF_table[row(RF_table)==col(RF_table)])/sum(RF_table)*100` percent of time with the testing dataset. This is more than twice that of the Naive-Bayes model. If we plot the frequency of how often the model classified a document to a specific author compared to the actual author of each document, we can see that the Random Forest model was a much stronger predictor than the Naive-Bayes. This is indicated by the diagonal line corresponding to correct classifications being light blue to the majority of the authors. We do not see the same problem with this model as the Naive Bayes, where the Naive-Bayes too frequently classified works as belonging to specific authors due to its inability to distinguish those authors. 
+
+```{r,echo=FALSE}
+plot = ggplot(RF_df)
+plot + geom_tile(aes(x=test_labels, y=RF_pred, fill=Freq)) + ggtitle("Predicted Versus Actual Classifications for Random Forest Model") + scale_x_discrete(name="Actual Classification") + scale_y_discrete(name="Predicted Classification") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+####We see that the Random Forest model produced a sensitivity rate of over 90 percent for 10 authors and the specificity rate was over 98 percent for all the authors. These are much more accurate results than the Naive-Bayes model, as it accurately predicted all the authors for at least some of the documents. The Naive-Bayes model failed to classify any documents as belonging to 4 authors, which resulted in the sensitivity rating to be 0. We can still see the Random Forest model having difficulty with a few authors, such as Mure Dickie and Scott Hillis. We can conclude that those authors did not write in a mannor that allowed the model to easily distinguish their writing style from other authors.
+
+```{r,echo=FALSE}
+RF_conf = confusionMatrix(RF_table)
+RF_conf_df = as.data.frame(RF_conf$byClass)
+RF_conf_df[order(-RF_conf_df$Sensitivity),1:2]
+```
+
+#Practice with Association Rule Mining
+
+####In this example, the data collected is a list of shopping trip transaction and each contains the contents of the gorcery bag accumulated during the trip. Our goal is to find a set of association rules that can be used to uncover relationships between the grocery purchases from the transactions in our data set. Each rule is defined as X -> Y, such that if the item set X exists in the transaction, then the itemset Y will also appear.   
+```{r, include = FALSE}
+library(arules)
+
+groceries = read.transactions('groceries.txt',format = "basket", sep = ",")
+```
+
+####As one can imagine, the number of rules that can be generated from large datasets like the one provided can be very large. In order to limit ourselves to just the most interesting rules we will filter these rules by their confidence, support and lift values.
+
+```{r,include=FALSE}
+grocrules = apriori(groceries,parameter=list(support=0.01,confidence=0.4,minlen=1))
+```
+
+####For my initial filter, I selected only rules with a support greater than 0.01 and a confidence greater than 0.4. The support of an itemset, also known as the group of groceries in the transaction, is the proportion of transactions in the data set which contain the itemset. So in this case, the particular item set in the left hand side of the rule (X) must appear in at least 1% of the transactions. The confidence threshold was set at 0.4. The condfidence can be interpreted as an estimate of the probability of finding the right hand side of the rule (Y) given that the transaction also contains the left hand side of the rule (X).
+
+####Given these filters, 62 rules were returned. If we look at the first 5 of these rules, we see that they are all of the format: given a single item -> whole milk. See numerous rules that predict whole milk as a result of other purchases makes sense, as when we look at the groceries data set as a whole, whole milk is the most frequent item amongst all transactions.
+
+```{r,echo=FALSE}
+inspect(grocrules[1:5])
+summary(groceries)
+```
+
+####We can filter the rules even further by creating a subset of the rules with a higher cutoff support and confidence, in this case 0.12 and 0.5 respectively. In addition, we can also filter by lift. This concept can be interpreted as the deviation of the support of the whole rule from the support expected under independence given the supports of the LHS and the RHS. Greater lift values indicate stronger associations. For this filtering, I looked at rules with a lift greater than 2.
+
+```{r,echo=FALSE}
+inspect(subset(grocrules, subset=confidence > 0.5 & lift > 2 & support > .012))
+```
+
+####This filtering reduces the number of rules to just 8. Of these, 6 are of the form: two grocery items -> whole milk. We see that the left hand side of the rule contains yogurt frequently. This makes sense as the shopper would be picking up both in a similar area of the grocery store, so picking up both items in the same transaction would frequently occur. In addition, two of the rules specify the purchasing of other types of vegetables when root vegetables and another item are also purchased. Due to proximity of these items in the grocery store, shoppers purchasing both would be a common occurance, in addition to teh fact that many common recipes call of both of these items. We therefore can conclude these rules to be interesting and the rational behind them makes sense in terms of the layout of most grocery stores.
